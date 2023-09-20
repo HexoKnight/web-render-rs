@@ -130,7 +130,7 @@ impl<S> Renderer<S> {
         Ok(renderer)
     }
 
-    /// .
+    /// consumes self and starts the game loop.
     pub fn start(self, state: S, updates_per_second: u32, max_frame_time: f64) {
         let _ = self.state.set(RefCell::new(state));
         game_loop(self, updates_per_second, max_frame_time, Self::update, Self::render);
@@ -168,6 +168,7 @@ impl<S> Renderer<S> {
             });
         }
     }
+
     /// adds an `on_render` function that is called as often as is allowed by the web page
     /// 
     /// returns self for chaining
