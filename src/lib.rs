@@ -217,9 +217,6 @@ impl<S> Renderer<S> {
         self.event_listeners.push(event_listener);
         Ok(self)
     }
-    // pub fn resize(&self) {
-    //     resize_canvas(self.canvas.as_ref(), self.on_resize.get())
-    // }
 
     /// adds an 'on_resize' event listener (that also optionally mutates the size)
     /// 
