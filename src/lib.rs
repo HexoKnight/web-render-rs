@@ -17,7 +17,7 @@ pub struct Renderer<S>
 
     _resize_closure: Closure::<dyn Fn()>,
     resize_observer: web_sys::ResizeObserver,
-    on_resize: Rc<OnceCell<fn(u32, u32) -> (u32, u32)>>,
+    on_resize: Rc<OnceCell<fn(&mut S, (u32, u32)) -> (u32, u32)>>,
 
     event_listeners: Vec<EventListener<'static>>
 }
@@ -101,12 +101,16 @@ impl<S> Renderer<S> {
             .dyn_into::<WebGl2RenderingContext>()?;
 
         let canvas = Rc::new(canvas);
+        let state = Rc::new(OnceCell::<RefCell<S>>::new());
         let on_resize = Rc::new(OnceCell::new());
 
         let rc_canvas = canvas.clone();
+        let rc_state = state.clone();
         let rc_on_resize = on_resize.clone();
         let resize_closure = Closure::<dyn Fn()>::new(move || {
-            resize_canvas(rc_canvas.as_ref(), rc_on_resize.get())
+            if let Some(state) = rc_state.get() {
+                resize_canvas(rc_canvas.as_ref(), state.borrow_mut().deref_mut(), rc_on_resize.get())
+            }
         });
         let resize_observer = web_sys::ResizeObserver::new(resize_closure.as_ref().unchecked_ref())?;
         resize_observer.observe(&canvas);
@@ -114,7 +118,7 @@ impl<S> Renderer<S> {
         let renderer = Self {
             canvas,
             context,
-            state: Rc::new(OnceCell::new()),
+            state,
             
             on_update: OnceCell::new(),
             on_render: OnceCell::new(),
@@ -224,23 +228,25 @@ impl<S> Renderer<S> {
     /// returns self for chaining
     /// 
     /// errors if on_resize has already been set returning the already set value
-    pub fn with_on_resize(self, on_resize: fn(u32, u32) -> (u32, u32)) -> Result<Self, ()> {
+    pub fn with_on_resize(self, on_resize: fn(&mut S, (u32, u32)) -> (u32, u32)) -> Result<Self, ()> {
         self.on_resize.set(on_resize).map_err(|_| ())?;
         Ok(self)
     }
     pub fn resize(&self) {
-        resize_canvas(self.canvas.as_ref(), self.on_resize.get())
+        if let Some(state) = self.state.get() {
+            resize_canvas(self.canvas.as_ref(), state.borrow_mut().deref_mut(), self.on_resize.get())
+        }
     }
 }
 
-fn resize_canvas(canvas: &web_sys::HtmlCanvasElement, on_resize: Option<&fn(u32, u32) -> (u32, u32)>) {
+fn resize_canvas<S>(canvas: &web_sys::HtmlCanvasElement, state: &mut S, on_resize: Option<&fn(&mut S, (u32, u32)) -> (u32, u32)>) {
     let context = canvas.get_context("webgl2").unwrap().unwrap()
         .dyn_into::<WebGl2RenderingContext>().unwrap();
 
     let mut width = canvas.client_width() as u32;
     let mut height = canvas.client_height() as u32;
     if let Some(on_resize) = on_resize {
-        (width, height) = on_resize(width, height);
+        (width, height) = on_resize(state, (width, height));
     }
     canvas.set_width(width);
     canvas.set_height(height);

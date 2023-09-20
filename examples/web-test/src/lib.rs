@@ -14,7 +14,10 @@ pub fn start() -> Result<(), JsValue> {
 
     let renderer = Renderer::from_canvas(canvas)?
         // could use to lower resolution:
-        .with_on_resize(|x, y| { (x/*  / 10 */, y/*  / 10 */) }).unwrap()
+        .with_on_resize(|_state, (x, y)| {
+            web_sys::console::log_2(&x.into(), &y.into());
+            (x/*  / 10 */, y/*  / 10 */)
+        }).unwrap()
         .with_on_render(on_render).unwrap()
         .with_on_update(on_update).unwrap()
         .with_shaders(include_str!("vert_shader.glsl"), include_str!("frag_shader.glsl")).unwrap()
