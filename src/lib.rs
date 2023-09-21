@@ -1,5 +1,5 @@
 use wasm_bindgen::{JsValue, JsCast, closure::Closure};
-use web_sys::{WebGlProgram, WebGl2RenderingContext, WebGlShader, Event};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram, WebGlShader, Event};
 use std::cell::{OnceCell, RefCell};
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -8,7 +8,7 @@ use game_loop::game_loop;
 pub struct Renderer<S>
     where S: 'static
 {
-    canvas: Rc<web_sys::HtmlCanvasElement>,
+    canvas: Rc<HtmlCanvasElement>,
     context: Rc<WebGl2RenderingContext>,
     state: Rc<OnceCell<RefCell<S>>>,
 
@@ -23,7 +23,7 @@ pub struct Renderer<S>
 }
 
 struct EventListener<'a> {
-    canvas: Rc<web_sys::HtmlCanvasElement>,
+    canvas: Rc<HtmlCanvasElement>,
     event_type: &'a str,
     closure: Closure::<dyn Fn(JsValue)>,
 }
@@ -90,7 +90,7 @@ impl<S> Drop for Renderer<S> {
 }
 
 impl<S> Renderer<S> {
-    pub fn from_canvas(canvas: web_sys::HtmlCanvasElement) -> Result<Renderer<S>, JsValue> {
+    pub fn from_canvas(canvas: HtmlCanvasElement) -> Result<Renderer<S>, JsValue> {
         
         // makes canvas focusable and thus able to recieve key* events
         canvas.set_tab_index(0); // would use 1 but docs suggest only -1 and 0 should be used
@@ -233,7 +233,7 @@ impl<S> Renderer<S> {
     }
 }
 
-fn resize_canvas<S>(canvas: &web_sys::HtmlCanvasElement, context: &WebGl2RenderingContext, state: &mut S, on_resize: Option<&fn(&mut S, (u32, u32)) -> (u32, u32)>) {
+fn resize_canvas<S>(canvas: &HtmlCanvasElement, context: &WebGl2RenderingContext, state: &mut S, on_resize: Option<&fn(&mut S, (u32, u32)) -> (u32, u32)>) {
 
     let mut width = canvas.client_width() as u32;
     let mut height = canvas.client_height() as u32;
