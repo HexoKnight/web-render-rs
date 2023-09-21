@@ -227,7 +227,7 @@ impl<S> Renderer<S> {
     /// 
     /// returns self for chaining
     /// 
-    /// errors if on_resize has already been set returning the already set value
+    /// errors if on_resize has already been set
     pub fn with_on_resize(self, on_resize: fn(&mut S, (u32, u32)) -> (u32, u32)) -> Result<Self, ()> {
         self.on_resize.set(on_resize).map_err(|_| ())?;
         Ok(self)
