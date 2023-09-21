@@ -117,7 +117,7 @@ impl<S> Renderer<S> {
         let resize_observer = web_sys::ResizeObserver::new(resize_closure.as_ref().unchecked_ref())?;
         resize_observer.observe(&canvas);
         
-        let renderer = Self {
+        Ok(Renderer {
             canvas,
             context,
             state,
@@ -130,9 +130,7 @@ impl<S> Renderer<S> {
             on_resize,
 
             event_listeners: Vec::new(),
-        };
-        
-        Ok(renderer)
+        })
     }
 
     /// consumes self and starts the game loop.
