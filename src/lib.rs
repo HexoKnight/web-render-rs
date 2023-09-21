@@ -130,7 +130,6 @@ impl<S> Renderer<S> {
             event_listeners: Vec::new(),
         };
         
-        renderer.resize();
         Ok(renderer)
     }
 
@@ -231,11 +230,6 @@ impl<S> Renderer<S> {
     pub fn with_on_resize(self, on_resize: fn(&mut S, (u32, u32)) -> (u32, u32)) -> Result<Self, ()> {
         self.on_resize.set(on_resize).map_err(|_| ())?;
         Ok(self)
-    }
-    pub fn resize(&self) {
-        if let Some(state) = self.state.get() {
-            resize_canvas(self.canvas.as_ref(), state.borrow_mut().deref_mut(), self.on_resize.get())
-        }
     }
 }
 
