@@ -185,7 +185,7 @@ impl<S> Renderer<S> {
         if let Some(on_render) = game_loop.game.on_render.get() {
             on_render(RenderInfo {
                 state: game_loop.game.state.clone().get().unwrap().borrow_mut().deref_mut(),
-                game_loop: game_loop
+                game_loop
             });
         }
     }
