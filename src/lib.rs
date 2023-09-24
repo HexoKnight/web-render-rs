@@ -1,9 +1,8 @@
 use wasm_bindgen::{JsValue, JsCast, closure::Closure};
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram, WebGlShader, Event};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram, WebGlShader, Event, window};
 use std::cell::{OnceCell, RefCell};
 use std::ops::DerefMut;
 use std::rc::Rc;
-use game_loop::game_loop;
 
 pub struct Renderer<S>
     where S: 'static
@@ -19,7 +18,17 @@ pub struct Renderer<S>
     resize_observer: web_sys::ResizeObserver,
     on_resize: Rc<OnceCell<fn(&mut S, (u32, u32)) -> (u32, u32)>>,
 
-    event_listeners: Vec<EventListener<'static>>
+    event_listeners: Vec<EventListener<'static>>,
+
+    updates_per_second: u32,
+    fixed_time_step: f64,
+    max_frame_time: f64,
+    accumulated_time: f64,
+    exit: bool,
+    previous_instant: f64,
+
+    number_of_updates: u32,
+    number_of_renders: u32,
 }
 
 struct EventListener<'a> {
@@ -35,51 +44,51 @@ impl Drop for EventListener<'_> {
 
 pub struct UpdateInfo<'a, S: 'static> {
     pub state: &'a mut S,
-    game_loop: &'a mut game_loop::GameLoop<Renderer<S>, game_loop::Time, ()>,
+    renderer: &'a mut Renderer<S>,
 } impl<'a, S> UpdateInfo<'a, S> {
     pub fn exit(&mut self) {
-        self.game_loop.exit()
+        self.renderer.exit = true;
     }
     pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {
-        self.game_loop.set_updates_per_second(new_updates_per_second)
+        self.renderer.updates_per_second = new_updates_per_second;
     }
     pub fn fixed_time_step(&self) -> f64 {
-        self.game_loop.fixed_time_step()
+        self.renderer.fixed_time_step
     }
     pub fn number_of_updates(&self) -> u32 {
-        self.game_loop.number_of_updates()
+        self.renderer.number_of_updates
     }
     pub fn number_of_renders(&self) -> u32 {
-        self.game_loop.number_of_renders()
+        self.renderer.number_of_renders
     }
 }
 pub struct RenderInfo<'a, S: 'static> {
     pub state: &'a mut S,
-    game_loop: &'a mut game_loop::GameLoop<Renderer<S>, game_loop::Time, ()>,
+    renderer: &'a mut Renderer<S>,
 } impl<'a, S> RenderInfo<'a, S> {
     pub fn context(&'a self) -> &'a web_sys::WebGl2RenderingContext {
-        &self.game_loop.game.context
+        &self.renderer.context
     }
     pub fn exit(&mut self) {
-        self.game_loop.exit()
+        self.renderer.exit = true;
     }
     pub fn set_updates_per_second(&mut self, new_updates_per_second: u32) {
-        self.game_loop.set_updates_per_second(new_updates_per_second)
+        self.renderer.updates_per_second = new_updates_per_second;
     }
     pub fn fixed_time_step(&self) -> f64 {
-        self.game_loop.fixed_time_step()
+        self.renderer.fixed_time_step
     }
     pub fn number_of_updates(&self) -> u32 {
-        self.game_loop.number_of_updates()
+        self.renderer.number_of_updates
     }
     pub fn number_of_renders(&self) -> u32 {
-        self.game_loop.number_of_renders()
+        self.renderer.number_of_renders
     }
     pub fn re_accumulate(&mut self) {
-        self.game_loop.re_accumulate()
+        self.renderer.accumulate(current_instant());
     }
     pub fn blending_factor(&self) -> f64 {
-        self.game_loop.blending_factor()
+        self.renderer.accumulated_time / self.renderer.fixed_time_step
     }
 }
 
@@ -130,13 +139,26 @@ impl<S> Renderer<S> {
             on_resize,
 
             event_listeners: Vec::new(),
+
+            updates_per_second: 0,
+            fixed_time_step: 0.0,
+            max_frame_time: 0.0,
+            accumulated_time: 0.0,
+            exit: false,
+            previous_instant: 0.0,
+            number_of_updates: 0,
+            number_of_renders: 0,
         })
     }
 
     /// consumes self and starts the game loop.
-    pub fn start(self, state: S, updates_per_second: u32, max_frame_time: f64) {
+    pub fn start(mut self, state: S, updates_per_second: u32, max_frame_time: f64) {
         let _ = self.state.set(RefCell::new(state));
-        game_loop(self, updates_per_second, max_frame_time, Self::update, Self::render);
+        self.updates_per_second = updates_per_second;
+        self.fixed_time_step = 1.0 / updates_per_second as f64;
+        self.max_frame_time = max_frame_time;
+        self.next_frame()
+        // game_loop(self, updates_per_second, max_frame_time, Self::update, Self::render);
     }
 
     /// links shaders to a program and attaches the program to the context to allow for drawing
@@ -163,11 +185,11 @@ impl<S> Renderer<S> {
         self.on_update.set(on_update).map_err(|_| ())?;
         Ok(self)
     }
-    fn update(game_loop: &mut game_loop::GameLoop<Self, game_loop::Time, ()>) {
-        if let Some(on_update) = game_loop.game.on_update.get() {
+    fn update(&mut self) {
+        if let Some(on_update) = self.on_update.get() {
             on_update(UpdateInfo {
-                state: game_loop.game.state.clone().get().unwrap().borrow_mut().deref_mut(),
-                game_loop,
+                state: self.state.clone().get().unwrap().borrow_mut().deref_mut(),
+                renderer: self,
             });
         }
     }
@@ -181,11 +203,11 @@ impl<S> Renderer<S> {
         self.on_render.set(on_render).map_err(|_| ())?;
         Ok(self)
     }
-    fn render(game_loop: &mut game_loop::GameLoop<Self, game_loop::Time, ()>) {
-        if let Some(on_render) = game_loop.game.on_render.get() {
+    fn render(&mut self) {
+        if let Some(on_render) = self.on_render.get() {
             on_render(RenderInfo {
-                state: game_loop.game.state.clone().get().unwrap().borrow_mut().deref_mut(),
-                game_loop
+                state: self.state.clone().get().unwrap().borrow_mut().deref_mut(),
+                renderer: self,
             });
         }
     }
@@ -231,6 +253,45 @@ impl<S> Renderer<S> {
         self.on_resize.set(on_resize).map_err(|_| ())?;
         Ok(self)
     }
+
+    fn next_frame(mut self) {
+        if self.exit { return }
+
+        let current_instant = current_instant();
+
+        self.accumulate(current_instant);
+
+        while self.accumulated_time >= self.fixed_time_step {
+            Self::update(&mut self);
+
+            self.accumulated_time -= self.fixed_time_step;
+            self.number_of_updates += 1;
+        }
+
+        // self.blending_factor = self.accumulated_time / self.fixed_time_step;
+
+        Self::render(&mut self);
+        self.number_of_renders += 1;
+
+        self.previous_instant = current_instant;
+        
+        let closure = Closure::once_into_js(move || self.next_frame());
+        window().unwrap().request_animation_frame(closure.as_ref().unchecked_ref()).unwrap();
+    }
+
+    fn accumulate(&mut self, current_instant: f64) {
+        let mut elapsed = current_instant - &self.previous_instant;
+        if elapsed > self.max_frame_time { elapsed = self.max_frame_time; }
+
+        // self.running_time += elapsed;
+        self.accumulated_time += elapsed;
+    }
+}
+
+/// returns time since `timeOrigin` in seconds
+///
+fn current_instant() -> f64 {
+    window().unwrap().performance().unwrap().now() / 1000.0
 }
 
 fn resize_canvas<S>(canvas: &HtmlCanvasElement, context: &WebGl2RenderingContext, state: &mut S, on_resize: Option<&fn(&mut S, (u32, u32)) -> (u32, u32)>) {
