@@ -25,5 +25,6 @@ features = [
   'Window',
   'Event',
   'KeyboardEvent',
+  'MouseEvent',
   'console',
 ]

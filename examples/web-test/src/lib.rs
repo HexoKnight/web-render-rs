@@ -13,15 +13,16 @@ pub fn start() -> Result<(), JsValue> {
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
 
     let renderer = Renderer::from_canvas(canvas)?
-        // could use to lower resolution:
         .with_on_resize(|_state, (x, y)| {
-            web_sys::console::log_2(&x.into(), &y.into());
+            web_sys::console::log_3(&"canvas size: ".into(), &x.into(), &y.into());
+            // could use to lower resolution:
             (x/*  / 10 */, y/*  / 10 */)
         }).unwrap()
         .with_on_render(on_render).unwrap()
         .with_on_update(on_update).unwrap()
         .with_shaders(include_str!("vert_shader.glsl"), include_str!("frag_shader.glsl")).unwrap()
-        .with_on_event("keydown", on_keydown)?;
+        .with_on_event("keydown", on_keydown)?
+        .with_on_event("click", on_click)?;
 
     let state = State {
         x: 1.0,
@@ -40,8 +41,14 @@ struct State {
 
 fn on_keydown(state: &mut State, event: web_sys::Event) {
     let event = event.dyn_into::<web_sys::KeyboardEvent>().unwrap();
-    web_sys::console::log_1(&event.key().into());
+    web_sys::console::log_2(&"key: ".into(), &event.key().into());
     state.most_recent_key = event.key();
+}
+
+fn on_click(state: &mut State, event: web_sys::Event) {
+    let event = event.dyn_into::<web_sys::MouseEvent>().unwrap();
+    web_sys::console::log_3(&"screen pos: ".into(), &event.client_x().into(), &event.client_y().into());
+    web_sys::console::log_3(&"canvas pos: ".into(), &event.offset_x().into(), &event.offset_y().into());
 }
 
 fn on_update(update_info: UpdateInfo<State>) {
